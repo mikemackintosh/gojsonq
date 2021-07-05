@@ -22,6 +22,7 @@ const (
 	operatorLtEEng         = "lte"
 	operatorStrictContains = "strictContains"
 	operatorContains       = "contains"
+	operatorNotContains    = "notContains"
 	operatorEndsWith       = "endsWith"
 	operatorStartsWith     = "startsWith"
 	operatorIn             = "in"
@@ -51,6 +52,7 @@ func defaultQueries() map[string]QueryFunc {
 		operatorLtEEng:         lte,
 		operatorStrictContains: strStrictContains,
 		operatorContains:       strContains,
+		operatorNotContains:    strNotContains,
 		operatorStartsWith:     strStartsWith,
 		operatorEndsWith:       strEndsWith,
 		operatorIn:             in,
@@ -160,6 +162,20 @@ func strContains(x, y interface{}) (bool, error) {
 		return false, fmt.Errorf("%v must be string", y)
 	}
 	return strings.Contains(strings.ToLower(xv), strings.ToLower(yv)), nil
+}
+
+// strNotContains checks if x does not contains y
+// This is case insensitive search
+func strNotContains(x, y interface{}) (bool, error) {
+	xv, okX := x.(string)
+	if !okX {
+		return false, fmt.Errorf("%v must be string", x)
+	}
+	yv, okY := y.(string)
+	if !okY {
+		return false, fmt.Errorf("%v must be string", y)
+	}
+	return !strings.Contains(strings.ToLower(xv), strings.ToLower(yv)), nil
 }
 
 // strStartsWith checks if x starts with y
