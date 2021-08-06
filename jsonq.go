@@ -349,6 +349,40 @@ func (j *JSONQ) findInMap(vm map[string]interface{}) []interface{} {
 	return result
 }
 
+// findInMap traverses through a map and returns the matched value list.
+// This helps to process Where/OrWhere queries
+func (j *JSONQ) findInArrayOfMap(vm []map[string]interface{}) []interface{} {
+	result := make([]interface{}, 0)
+	orPassed := false
+	for _, qList := range j.queries {
+		andPassed := true
+		for _, q := range qList {
+			cf, ok := j.queryMap[q.operator]
+			if !ok {
+				j.addError(fmt.Errorf("invalid operator %s", q.operator))
+				return result
+			}
+
+			nv, errnv := getNestedValue(vm, q.key, j.option.separator)
+			if errnv != nil {
+				j.addError(errnv)
+				andPassed = false
+			} else {
+				qb, err := cf(nv, q.value)
+				if err != nil {
+					j.addError(err)
+				}
+				andPassed = andPassed && qb
+			}
+		}
+		orPassed = orPassed || andPassed
+	}
+	if orPassed {
+		result = append(result, vm)
+	}
+	return result
+}
+
 // processQuery makes the result
 func (j *JSONQ) processQuery() *JSONQ {
 	if aa, ok := j.jsonContent.([]interface{}); ok {
@@ -497,6 +531,7 @@ func (j *JSONQ) only(properties ...string) interface{} {
 			for _, prop := range properties {
 				node, alias := makeAlias(prop, j.option.separator)
 				rv, errV := getNestedValue(am, node, j.option.separator)
+				// fmt.Printf("--> FOUND: %#v\n", rv)
 				if errV != nil {
 					j.addError(errV)
 					continue

@@ -191,7 +191,79 @@ func (s *sortMap) compare(x, y interface{}) (res bool) {
 
 // getNestedValue fetch nested value from node
 func getNestedValue(input interface{}, node, separator string) (interface{}, error) {
-	pp := strings.Split(node, separator)
+	var pp []string
+	if strings.HasPrefix(node, "search|") {
+		specialParts := strings.Split(node[7:], "=")
+		if len(specialParts) > 1 {
+			pp := strings.Split(specialParts[0], separator)
+			wantValues := strings.Split(specialParts[1], "||")
+			if mp, ok := input.(map[string]interface{}); ok {
+				// We are expecting a slice or a map here
+				if strings.Contains(pp[0], "[]") {
+					input = mp[pp[0][:len(pp[0])-2]]
+
+					var found []string
+					if mp, ok := input.([]interface{}); ok {
+						for _, mi := range mp {
+							if mval, ok := mi.(map[string]interface{}); ok {
+								if v, ok := mval[pp[1]]; ok {
+									// fmt.Printf("FOUND THIS %s\n\n", v)
+									for _, wantValue := range wantValues {
+										// fmt.Printf("-> Searching for %s\n", wantValue)
+										switch ev := v.(type) {
+										case string:
+											// fmt.Printf("-> Searching ev: %s\n", ev)
+											if ev == wantValue {
+												// fmt.Printf("-> Match ev: %s\n", ev)
+												found = append(found, ev)
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+
+					if len(found) > 0 {
+						return fmt.Sprintf("%s", strings.Join(found, ",")), nil
+					}
+				}
+			}
+		}
+	} else if strings.HasPrefix(node, "get|") {
+
+		if mp, ok := input.(map[string]interface{}); ok {
+			// We are expecting a slice or a map here
+			pp := strings.Split(node[4:], separator)
+
+			if strings.Contains(pp[0], "[]") {
+				input = mp[pp[0][:len(pp[0])-2]]
+				var found []string
+				if mp, ok := input.([]interface{}); ok {
+					for _, mi := range mp {
+						if mval, ok := mi.(map[string]interface{}); ok {
+							if v, ok := mval[pp[1]]; ok {
+								// fmt.Printf("FOUND THIS %s\n\n", v)
+								// fmt.Printf("-> Searching for %s\n", wantValue)
+								switch ev := v.(type) {
+								case string:
+									// fmt.Printf("-> Searching ev: %s\n", ev)
+									// fmt.Printf("-> Match ev: %s\n", ev)
+									found = append(found, ev)
+								}
+							}
+						}
+					}
+				}
+
+				if len(found) > 0 {
+					return fmt.Sprintf("%s", strings.Join(found, ",")), nil
+				}
+			}
+		}
+	}
+
+	pp = strings.Split(node, separator)
 	for _, n := range pp {
 		if isIndex(n) {
 			// find slice/array
