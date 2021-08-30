@@ -3,13 +3,20 @@ package gojsonq
 import (
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-const debug bool = false
+var debug bool
+
+func init() {
+	if len(os.Getenv("GOJSONQDEBUG")) > 0 {
+		debug = true
+	}
+}
 
 func abs(i int) int {
 	if i < 0 {
@@ -230,6 +237,7 @@ func getNestedValue(input interface{}, node, separator string) (interface{}, err
 			fmt.Printf("Node: %#v\n", node)
 			fmt.Printf("================\n")
 		}
+
 		specialParts := strings.Split(node[7:], "=")
 		if len(specialParts) > 1 {
 			pp := strings.Split(specialParts[0], separator)
@@ -275,6 +283,90 @@ func getNestedValue(input interface{}, node, separator string) (interface{}, err
 				}
 			}
 		}
+
+		specialPartsNotLike := strings.Split(node[7:], "NOT LIKE")
+		if len(specialPartsNotLike) > 1 {
+			if debug {
+				fmt.Printf("FOUND special part %#v\n\n", specialPartsNotLike)
+			}
+			pp := strings.Split(specialPartsNotLike[0], separator)
+			for ppi, p := range pp {
+				pp[ppi] = strings.TrimSpace(p)
+			}
+			if debug {
+				fmt.Printf("FOUND pp %#v\n\n", pp)
+			}
+			wantValues := strings.Split(specialPartsNotLike[1], " OR ")
+			if mp, ok := input.(map[string]interface{}); ok {
+				// We are expecting a slice or a map here
+				if strings.Contains(pp[0], "[]") {
+					input = mp[pp[0][:len(pp[0])-2]]
+
+					if debug {
+						fmt.Printf("FOUND input %#v\n\n", input)
+					}
+
+					var found []string
+					if mp, ok := input.([]interface{}); ok {
+						if debug {
+							fmt.Printf("FOUND mp %#v\n\n", mp)
+						}
+						for _, mi := range mp {
+							if mval, ok := mi.(map[string]interface{}); ok {
+								if v, ok := mval[pp[1]]; ok {
+									if debug {
+										fmt.Printf("FOUND THIS %s\n\n", v)
+									}
+									for _, wantValue := range wantValues {
+										if debug {
+											fmt.Printf("-> Searching for %s\n", wantValue)
+										}
+										switch ev := v.(type) {
+										case string:
+											if debug {
+												fmt.Printf("-> Searching ev: %s\n", ev)
+											}
+											if ev == wantValue {
+												if debug {
+													fmt.Printf("-> Match ev: %s\n", ev)
+												}
+												found = append(found, ev)
+											}
+										}
+									}
+								}
+							}
+						}
+					} else if mp, ok := input.(map[string]interface{}); ok {
+						if debug {
+							fmt.Printf("FOUND mapstring %#v\n\n", mp[pp[1]])
+						}
+						if childList, ok := mp[pp[1]].([]interface{}); ok {
+							for _, child := range childList {
+								for _, wantValue := range wantValues {
+									if debug {
+										fmt.Printf("FOUND child %#v\n\n", child)
+									}
+
+									if debug {
+										fmt.Printf("-> Searching for %s\n", wantValue)
+									}
+
+									if !strings.Contains(child.(string), strings.TrimSpace(wantValue)) {
+										found = append(found, child.(string))
+									}
+								}
+							}
+						}
+					}
+
+					if len(found) > 0 {
+						return fmt.Sprintf("%s", strings.Join(found, ",")), nil
+					}
+				}
+			}
+		}
+
 	}
 
 	pp = strings.Split(remainder, separator)
