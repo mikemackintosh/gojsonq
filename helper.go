@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+const debug bool = false
+
 func abs(i int) int {
 	if i < 0 {
 		i = -1 * i
@@ -18,6 +20,22 @@ func abs(i int) int {
 
 func isIndex(in string) bool {
 	return strings.HasPrefix(in, "[") && strings.HasSuffix(in, "]")
+}
+
+func isCommand(in string) (bool, string, string) {
+	var is bool
+	var command string
+	var remainder = in
+	if strings.Contains(in, ":") {
+		o := strings.Split(in, ":")
+		if len(o) == 2 {
+			is = true
+			command = o[0]
+			remainder = o[1]
+		}
+	}
+
+	return is, command, remainder
 }
 
 func getIndex(in string) (int, error) {
@@ -192,11 +210,30 @@ func (s *sortMap) compare(x, y interface{}) (res bool) {
 // getNestedValue fetch nested value from node
 func getNestedValue(input interface{}, node, separator string) (interface{}, error) {
 	var pp []string
-	if strings.HasPrefix(node, "search|") {
+	var search, get bool
+
+	ok, command, remainder := isCommand(node)
+	if ok {
+		switch command {
+		case "get":
+			get = true
+		case "search":
+			search = true
+		default:
+			return empty, errors.New("invalid command")
+		}
+	}
+
+	if search {
+		if debug {
+			fmt.Printf("================\n")
+			fmt.Printf("Node: %#v\n", node)
+			fmt.Printf("================\n")
+		}
 		specialParts := strings.Split(node[7:], "=")
 		if len(specialParts) > 1 {
 			pp := strings.Split(specialParts[0], separator)
-			wantValues := strings.Split(specialParts[1], "||")
+			wantValues := strings.Split(specialParts[1], " OR ")
 			if mp, ok := input.(map[string]interface{}); ok {
 				// We are expecting a slice or a map here
 				if strings.Contains(pp[0], "[]") {
@@ -207,14 +244,22 @@ func getNestedValue(input interface{}, node, separator string) (interface{}, err
 						for _, mi := range mp {
 							if mval, ok := mi.(map[string]interface{}); ok {
 								if v, ok := mval[pp[1]]; ok {
-									// fmt.Printf("FOUND THIS %s\n\n", v)
+									if debug {
+										fmt.Printf("FOUND THIS %s\n\n", v)
+									}
 									for _, wantValue := range wantValues {
-										// fmt.Printf("-> Searching for %s\n", wantValue)
+										if debug {
+											fmt.Printf("-> Searching for %s\n", wantValue)
+										}
 										switch ev := v.(type) {
 										case string:
-											// fmt.Printf("-> Searching ev: %s\n", ev)
+											if debug {
+												fmt.Printf("-> Searching ev: %s\n", ev)
+											}
 											if ev == wantValue {
-												// fmt.Printf("-> Match ev: %s\n", ev)
+												if debug {
+													fmt.Printf("-> Match ev: %s\n", ev)
+												}
 												found = append(found, ev)
 											}
 										}
@@ -230,12 +275,12 @@ func getNestedValue(input interface{}, node, separator string) (interface{}, err
 				}
 			}
 		}
-	} else if strings.HasPrefix(node, "get|") {
+	}
 
+	pp = strings.Split(remainder, separator)
+	if get {
 		if mp, ok := input.(map[string]interface{}); ok {
 			// We are expecting a slice or a map here
-			pp := strings.Split(node[4:], separator)
-
 			if strings.Contains(pp[0], "[]") {
 				input = mp[pp[0][:len(pp[0])-2]]
 				var found []string
@@ -243,12 +288,16 @@ func getNestedValue(input interface{}, node, separator string) (interface{}, err
 					for _, mi := range mp {
 						if mval, ok := mi.(map[string]interface{}); ok {
 							if v, ok := mval[pp[1]]; ok {
-								// fmt.Printf("FOUND THIS %s\n\n", v)
-								// fmt.Printf("-> Searching for %s\n", wantValue)
+								if debug {
+									fmt.Printf("FOUND THIS %s\n\n", v)
+									fmt.Printf("-> Searching for %s\n", v)
+								}
 								switch ev := v.(type) {
 								case string:
-									// fmt.Printf("-> Searching ev: %s\n", ev)
-									// fmt.Printf("-> Match ev: %s\n", ev)
+									if debug {
+										fmt.Printf("-> Searching ev: %s\n", ev)
+										fmt.Printf("-> Match ev: %s\n", ev)
+									}
 									found = append(found, ev)
 								}
 							}
@@ -263,7 +312,6 @@ func getNestedValue(input interface{}, node, separator string) (interface{}, err
 		}
 	}
 
-	pp = strings.Split(node, separator)
 	for _, n := range pp {
 		if isIndex(n) {
 			// find slice/array
